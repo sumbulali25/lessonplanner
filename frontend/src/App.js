@@ -6,6 +6,7 @@ import LessonPlan from './components/LessonPlan';
 // TEMPORARY: Hardcode your backend URL here for testing
 // Replace this with your actual Render backend URL
 // Updated to correct backend URL for deployment
+// Force rebuild timestamp: 2024-01-15
 const API_BASE_URL = 'https://lessonplanner-i9xf.onrender.com';
 
 function App() {

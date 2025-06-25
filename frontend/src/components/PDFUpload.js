@@ -3,7 +3,8 @@ import axios from 'axios';
 
 // TEMPORARY: Hardcode your backend URL here for testing
 // Replace this with your actual Render backend URL
-const API_BASE_URL = 'https://your-backend-url.onrender.com';
+// Force rebuild timestamp: 2024-01-15
+const API_BASE_URL = 'https://lessonplanner-i9xf.onrender.com';
 
 function PDFUpload({ setPdfText }) {
   const fileInput = useRef();
