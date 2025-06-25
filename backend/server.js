@@ -94,26 +94,70 @@ app.post('/api/generate', async (req, res) => {
     return res.status(400).json({ error: 'Missing pdfText or answers' });
   }
   
-  try {
-    const prompt = `Create a lesson plan based on the following PDF content and teacher's answers.\n\nPDF Content:\n${pdfText}\n\nTeacher's Answers:\n${JSON.stringify(answers, null, 2)}`;
-    
-    // Try different model names
-    let model;
+  // Retry logic for Google API
+  const maxRetries = 3;
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      model = gemini.getGenerativeModel({ model: 'gemini-1.5-pro' });
-    } catch (modelError) {
-      console.log('Falling back to gemini-1.0-pro');
-      model = gemini.getGenerativeModel({ model: 'gemini-1.0-pro' });
+      console.log(`Attempt ${attempt} of ${maxRetries}`);
+      
+      const prompt = `Create a lesson plan based on the following PDF content and teacher's answers.\n\nPDF Content:\n${pdfText}\n\nTeacher's Answers:\n${JSON.stringify(answers, null, 2)}`;
+      
+      // Try different model names
+      let model;
+      try {
+        model = gemini.getGenerativeModel({ 
+          model: 'gemini-1.5-pro',
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
+          }
+        });
+      } catch (modelError) {
+        console.log('Falling back to gemini-1.0-pro');
+        model = gemini.getGenerativeModel({ 
+          model: 'gemini-1.0-pro',
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 2048,
+          }
+        });
+      }
+      
+      const result = await model.generateContent(prompt);
+      const lessonPlan = result.response.candidates[0].content.parts[0].text;
+      console.log('Lesson plan generated successfully');
+      return res.json({ lessonPlan });
+      
+    } catch (err) {
+      lastError = err;
+      console.error(`Attempt ${attempt} failed:`, err.message);
+      
+      // Check if it's a retryable error
+      if (err.message.includes('retryDelay') || err.message.includes('429') || err.message.includes('503')) {
+        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      } else {
+        // Non-retryable error, break immediately
+        break;
+      }
     }
-    
-    const result = await model.generateContent(prompt);
-    const lessonPlan = result.response.candidates[0].content.parts[0].text;
-    console.log('Lesson plan generated successfully');
-    res.json({ lessonPlan });
-  } catch (err) {
-    console.error('Lesson plan generation error:', err);
-    res.status(500).json({ error: 'Failed to generate lesson plan', details: err.message });
   }
+  
+  // All retries failed
+  console.error('All retry attempts failed');
+  res.status(500).json({ 
+    error: 'Failed to generate lesson plan', 
+    details: lastError.message,
+    attempts: maxRetries
+  });
 });
 
 const PORT = process.env.PORT || 5000;
