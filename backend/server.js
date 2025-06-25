@@ -14,6 +14,11 @@ app.use(express.json());
 
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ message: 'Lesson Planner Backend is running!' });
+});
+
 // PDF upload and parse endpoint
 app.post('/api/upload', upload.single('pdf'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
