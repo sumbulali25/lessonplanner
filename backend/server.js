@@ -85,6 +85,54 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
   }
 });
 
+// Fallback lesson plan generator
+function generateFallbackLessonPlan(pdfText, answers) {
+  const { grade, size, difficulty, time, outcome } = answers;
+  
+  return `# Lesson Plan
+
+## Grade Level: ${grade}
+## Class Size: ${size} students
+## Difficulty Level: ${difficulty}
+## Duration: ${time} minutes
+
+## Learning Objective
+${outcome}
+
+## Materials Needed
+- PDF content (provided)
+- Writing materials
+- Additional resources as needed
+
+## Lesson Structure
+
+### 1. Introduction (5-10 minutes)
+- Review the PDF content
+- Set learning expectations
+- Engage students with key concepts
+
+### 2. Main Activity (${Math.floor(time * 0.6)} minutes)
+- Work through the PDF content
+- Apply concepts through activities
+- Group work or individual practice
+
+### 3. Assessment (${Math.floor(time * 0.2)} minutes)
+- Check for understanding
+- Provide feedback
+- Address any questions
+
+### 4. Conclusion (${Math.floor(time * 0.1)} minutes)
+- Summarize key points
+- Connect to learning objective
+- Preview next steps
+
+## Notes
+This lesson plan was generated automatically. Please review and modify as needed for your specific classroom context.
+
+## PDF Content Summary
+${pdfText.substring(0, 500)}${pdfText.length > 500 ? '...' : ''}`;
+}
+
 // Lesson plan generation endpoint
 app.post('/api/generate', async (req, res) => {
   console.log('Generate endpoint hit');
@@ -94,8 +142,8 @@ app.post('/api/generate', async (req, res) => {
     return res.status(400).json({ error: 'Missing pdfText or answers' });
   }
   
-  // Retry logic for Google API
-  const maxRetries = 3;
+  // Retry logic for Google API with longer delays
+  const maxRetries = 5;
   let lastError;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -139,9 +187,29 @@ app.post('/api/generate', async (req, res) => {
       console.error(`Attempt ${attempt} failed:`, err.message);
       
       // Check if it's a retryable error
-      if (err.message.includes('retryDelay') || err.message.includes('429') || err.message.includes('503')) {
-        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+      if (err.message.includes('retryDelay') || err.message.includes('429') || err.message.includes('503') || err.message.includes('500')) {
+        // Extract retry delay from error message if available
+        let delay = 0;
+        if (err.message.includes('retryDelay')) {
+          const match = err.message.match(/"retryDelay":"(\d+)s"/);
+          if (match) {
+            delay = parseInt(match[1]) * 1000; // Convert to milliseconds
+            delay += 2000; // Add 2 seconds buffer
+          }
+        }
+        
+        // If no specific delay found, use exponential backoff
+        if (delay === 0) {
+          delay = Math.pow(2, attempt) * 5000; // 10s, 20s, 40s, 80s, 160s
+        }
+        
         console.log(`Waiting ${delay}ms before retry...`);
+        
+        // Don't wait too long on the last attempt
+        if (attempt === maxRetries) {
+          delay = Math.min(delay, 30000); // Max 30 seconds on last attempt
+        }
+        
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       } else {
@@ -151,11 +219,13 @@ app.post('/api/generate', async (req, res) => {
     }
   }
   
-  // All retries failed
-  console.error('All retry attempts failed');
-  res.status(500).json({ 
-    error: 'Failed to generate lesson plan', 
-    details: lastError.message,
+  // All retries failed - provide fallback lesson plan
+  console.error('All retry attempts failed, providing fallback lesson plan');
+  const fallbackPlan = generateFallbackLessonPlan(pdfText, answers);
+  
+  res.json({ 
+    lessonPlan: fallbackPlan,
+    note: 'AI service was temporarily unavailable. This is a basic lesson plan template. Please customize it for your needs.',
     attempts: maxRetries
   });
 });
