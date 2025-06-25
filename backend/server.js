@@ -4,6 +4,7 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -17,6 +18,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Check if Gemini API key is available
+if (!process.env.GEMINI_API_KEY) {
+  console.error('GEMINI_API_KEY is not set in environment variables');
+}
+
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Health check endpoint
@@ -27,19 +33,55 @@ app.get('/', (req, res) => {
 // PDF upload and parse endpoint
 app.post('/api/upload', upload.single('pdf'), async (req, res) => {
   console.log('Upload endpoint hit');
+  console.log('Request headers:', req.headers);
+  console.log('Request body keys:', Object.keys(req.body || {}));
+  console.log('Request files:', req.files);
+  console.log('Request file:', req.file);
+  
   if (!req.file) {
     console.log('No file uploaded');
     return res.status(400).json({ error: 'No file uploaded' });
   }
+  
   try {
     console.log('File received:', req.file.originalname);
-    const dataBuffer = require('fs').readFileSync(req.file.path);
+    console.log('File path:', req.file.path);
+    console.log('File size:', req.file.size);
+    
+    // Check if file exists
+    if (!fs.existsSync(req.file.path)) {
+      throw new Error('Uploaded file not found on disk');
+    }
+    
+    const dataBuffer = fs.readFileSync(req.file.path);
+    console.log('File read successfully, size:', dataBuffer.length);
+    
     const pdfData = await pdfParse(dataBuffer);
-    console.log('PDF parsed successfully');
+    console.log('PDF parsed successfully, text length:', pdfData.text.length);
+    
+    // Clean up the uploaded file
+    fs.unlinkSync(req.file.path);
+    console.log('Uploaded file cleaned up');
+    
     res.json({ text: pdfData.text });
   } catch (err) {
-    console.error('PDF parsing error:', err);
-    res.status(500).json({ error: 'Failed to parse PDF', details: err.message });
+    console.error('PDF processing error:', err);
+    console.error('Error stack:', err.stack);
+    
+    // Clean up file if it exists
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupErr) {
+        console.error('Failed to cleanup file:', cleanupErr);
+      }
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to parse PDF', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 
@@ -47,6 +89,11 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
 app.post('/api/generate', async (req, res) => {
   console.log('Generate endpoint hit');
   const { pdfText, answers } = req.body;
+  
+  if (!pdfText || !answers) {
+    return res.status(400).json({ error: 'Missing pdfText or answers' });
+  }
+  
   try {
     const prompt = `Create a lesson plan based on the following PDF content and teacher's answers.\n\nPDF Content:\n${pdfText}\n\nTeacher's Answers:\n${JSON.stringify(answers, null, 2)}`;
     const model = gemini.getGenerativeModel({ model: 'gemini-pro' });
