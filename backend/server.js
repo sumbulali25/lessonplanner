@@ -96,7 +96,16 @@ app.post('/api/generate', async (req, res) => {
   
   try {
     const prompt = `Create a lesson plan based on the following PDF content and teacher's answers.\n\nPDF Content:\n${pdfText}\n\nTeacher's Answers:\n${JSON.stringify(answers, null, 2)}`;
-    const model = gemini.getGenerativeModel({ model: 'gemini-pro' });
+    
+    // Try different model names
+    let model;
+    try {
+      model = gemini.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    } catch (modelError) {
+      console.log('Falling back to gemini-1.0-pro');
+      model = gemini.getGenerativeModel({ model: 'gemini-1.0-pro' });
+    }
+    
     const result = await model.generateContent(prompt);
     const lessonPlan = result.response.candidates[0].content.parts[0].text;
     console.log('Lesson plan generated successfully');
