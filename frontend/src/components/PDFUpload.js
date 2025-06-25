@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import axios from 'axios';
 
-// Use environment variable for API URL, fallback to localhost for development
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// TEMPORARY: Hardcode your backend URL here for testing
+// Replace this with your actual Render backend URL
+const API_BASE_URL = 'https://your-backend-url.onrender.com';
 
 function PDFUpload({ setPdfText }) {
   const fileInput = useRef();

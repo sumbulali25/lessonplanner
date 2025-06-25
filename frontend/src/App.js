@@ -3,8 +3,9 @@ import PDFUpload from './components/PDFUpload';
 import QuestionForm from './components/QuestionForm';
 import LessonPlan from './components/LessonPlan';
 
-// Use environment variable for API URL, fallback to localhost for development
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// TEMPORARY: Hardcode your backend URL here for testing
+// Replace this with your actual Render backend URL
+const API_BASE_URL = 'https://lessonplanner-i9xf.onrender.com';
 
 function App() {
   const [pdfText, setPdfText] = useState('');
